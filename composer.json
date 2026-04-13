@@ -1,0 +1,16 @@
+{
+    "name": "ibibicloud/cloudflare",
+    "type": "library",
+    "license": "Apache-2.0",
+    "require": {
+        "php": ">=7.2.0",
+    	"ibibicloud/tools": "*"
+    },   
+    "autoload": {
+        "psr-4": {
+            "ibibicloud\\cloudflare\\": "src"
+        },
+        "files": [
+        ]
+    }
+}
