@@ -1,21 +1,23 @@
 <?php
 
+declare(strict_types = 1);
+
 namespace ibibicloud\cloudflare;
 
 use ibibicloud\facade\HttpClient;
 
 class D1
 {
-    private $config;
+    private array $config;
     
-    // 链式变量
-    private $dbId;
-    private $table;
-    private $where = [];
-    private $order = '';
-    private $limit = '';
-    private $field = '*';
-    private $lastSql = '';
+    // 链式查询属性
+    private string $dbId;
+    private string $table;
+    private array $where = [];
+    private string $order = '';
+    private string $limit = '';
+    private string $field = '*';
+    private string $lastSql = '';
 
     public function __construct()
     {
@@ -23,114 +25,111 @@ class D1
         $this->dbId = $this->config['D1']['dbId1'];
     }
 
-    // 指定数据库ID
-    public function database($dbId)
+    // 指定数据库 ID
+    public function database(string $dbId): self
     {
         $this->dbId = $dbId;
         return $this;
     }
 
-    // 指定表名
-    public function table($table)
+    // 指定数据表
+    public function table(string $table): self
     {
         $this->table = $table;
         return $this;
     }
 
-    // 指定字段
-    public function field($field)
+    // 指定查询字段
+    public function field(string $field): self
     {
         $this->field = $field;
         return $this;
     }
 
-    // WHERE 条件解析 (支持 TP5.1 风格)
-    public function where($field, $op = null, $val = null)
+    // WHERE 条件查询 (支持 TP5.1 风格)
+    public function where($field, $operator = null, $value = null): self
     {
-        // 重点：支持二维数组条件 [ ['name','=','a'], ['status','=',1] ]
-        if (is_array($field) && is_array(reset($field))) {
-            foreach ($field as $condition) {
+        // 二维数组批量条件 [ ['name', '=', 'duck'], ['status', '=', 1] ]
+        if ( is_array($field) && is_array(reset($field)) ) {
+            foreach ( $field as $condition ) {
                 $this->where[] = $condition;
             }
+
             return $this;
         }
 
-        if (is_array($field)) {
-            foreach ($field as $k => $v) {
-                if (is_array($v)) {
-                    // 支持 where(['id' => ['>', 10]])
-                    $this->where[] = [$k, $v[0], $v[1]];
-                } else {
-                    // 支持 where(['status' => 1])
-                    $this->where[] = [$k, '=', $v];
-                }
+        // 一维数组条件 ['status' => 1]
+        if ( is_array($field) ) {
+            foreach ( $field as $k => $v ) {
+                $this->where[] = [$k, '=', $v];
             }
-        } else {
-            if ($val === null) {
-                // 支持 where('id', 1)
-                $val = $op;
-                $op = '=';
-            }
-            // 支持 where('id', '>', 1)
-            $this->where[] = [$field, $op, $val];
+
+            return $this;
         }
+
+        // 字符串条件
+        if ( $value === null ) {
+            $value = $operator;
+            $operator = '=';
+        }
+
+        $this->where[] = [$field, $operator, $value];
+
         return $this;
     }
 
     // 排序
-    public function order($order)
+    public function order(string $order): self
     {
         $this->order = $order;
         return $this;
     }
 
     // 限制条数
-    public function limit($limit, $offset = 0)
+    public function limit(int $limit, int $offset = 0): self
     {
-        $limit = (int)$limit;
-        $offset = (int)$offset;
         $this->limit = $offset > 0 ? "{$offset}, {$limit}" : "{$limit}";
+
         return $this;
     }
 
     // 查询多条
-    public function select()
+    public function select(): array
     {
         $sql = $this->buildSelectSql();
         $params = $this->getWhereParams();
         $res = $this->query($sql, $params);
+
         return $res['result'] ? $this->format($res['result'][0]['results']) : [];
     }
 
     // 查询单条
-    public function find()
+    public function find(): ?array
     {
         $res = $this->limit(1)->select();
+
         return $res[0] ?? null;
     }
 
     // 获取单个字段的值
-    public function value($field)
+    public function value(string $field)
     {
         $res = $this->field($field)->find();
-        return $res['rows'] ? $res['rows'][0][0] : null;
+
+        return $res[$field] ?? null;
     }
 
-    // 获取某一列的值
-    public function column($field, $key = null)
+    // 获取某一列的数据
+    public function column(string $field, ?string $key = null): array
     {
         $fieldStr = $key ? "{$key},{$field}" : $field;
         $res = $this->field($fieldStr)->select();
-        if ( $key === null ) {
-            return $res['rows'] ? array_column($res['rows'], 0) : [];
-        } else {
-            // return $res['rows'];
-            return $res['rows'] ? array_column($res['rows'], 1, 0) : [];
-        }
+
+        return $key === null ? array_column($res, $field) : array_column($res, $field, $key);
     }
 
     // 插入数据
-    public function insert($data)
+    public function insert(array $data): int
     {
         // 判断是否为批量插入
         $isBatch = is_array(reset($data));
@@ -160,46 +159,55 @@ class D1
         }
 
         $res = $this->query($sql, $params);
-        return $res['success'] ? $res['result'][0]['meta']['changes'] : 0;
+
+        return $res['success'] ? (int)$res['result'][0]['meta']['changes'] : 0;
     }
 
     // 更新数据
-    public function update($data)
+    public function update(array $data): int
     {
         if ( empty($this->where) ) {
-            throw new \Exception('Update must have where condition');
+            throw new \Exception('Update operation must requires WHERE condition');
         }
+
         $sets = [];
         $params = [];
+
         foreach ( $data as $k => $v ) {
             $sets[] = "{$k}=?";
             $params[] = $v;
         }
+
         $sql = "UPDATE {$this->table} SET " . implode(',', $sets) . $this->buildWhereSql();
         $params = array_merge($params, $this->getWhereParams());
         $res = $this->query($sql, $params);
-        return $res['success'] ? $res['result'][0]['meta']['changes'] : 0;
+
+        return $res['success'] ? (int)$res['result'][0]['meta']['changes'] : 0;
     }
 
     // 删除数据
-    public function delete()
+    public function delete(): int
     {
         if ( empty($this->where) ) {
-            throw new \Exception('Delete must have where condition');
+            throw new \Exception('Delete operation must requires WHERE condition');
         }
+
         $sql = "DELETE FROM {$this->table}" . $this->buildWhereSql();
         $res = $this->query($sql, $this->getWhereParams());
-        return $res['success'] ? $res['result'][0]['meta']['changes'] : 0;
+
+        return $res['success'] ? (int)$res['result'][0]['meta']['changes'] : 0;
     }
 
-    // 获取最后一条 SQL
-    public function getLastSql()
+    // 获取最后执行的 SQL 语句
+    public function getLastSql(): string
     {
         return $this->lastSql;
     }
 
     // ================= 内部方法 =================
-    private function reset()
+
+    // 重置查询条件
+    private function reset(): void
     {
         $this->where = [];
         $this->order = '';
@@ -208,48 +216,68 @@ class D1
     }
 
     // 统一格式化数据：columns + rows => 键值对数组
-    private function format($data)
+    private function format(array $data): array
     {
         $cols = $data['columns'] ?? [];
         $rows = $data['rows'] ?? [];
-        $result = [];
+        $res = [];
 
         foreach ( $rows as $row ) {
-            $result[] = array_combine($cols, $row);
+            $res[] = array_combine($cols, $row);
         }
 
-        return $result;
+        return $res;
     }
 
-    private function buildSelectSql()
+    // 构建查询 SQL 语句
+    private function buildSelectSql(): string
     {
         $sql = "SELECT {$this->field} FROM {$this->table}";
         $sql .= $this->buildWhereSql();
-        if ( $this->order ) $sql .= " ORDER BY {$this->order}";
-        if ( $this->limit ) $sql .= " LIMIT {$this->limit}";
+
+        if ( $this->order ) {
+            $sql .= " ORDER BY {$this->order}";
+        }
+
+        if ( $this->limit ) {
+            $sql .= " LIMIT {$this->limit}";
+        }
+
         return $sql;
     }
 
-    private function buildWhereSql()
+    // 构建 WHERE 条件
+    private function buildWhereSql(): string
     {
-        if ( empty($this->where) ) return '';
+        if ( empty($this->where) ) {
+            return '';
+        }
+
         $arr = [];
+
         foreach ( $this->where as $w ) {
             $arr[] = "{$w[0]} {$w[1]} ?";
         }
+
         return " WHERE " . implode(' AND ', $arr);
     }
 
-    private function getWhereParams()
+    // 获取预处理参数
+    private function getWhereParams(): array
     {
-        $p = [];
-        foreach ( $this->where as $w ) $p[] = $w[2];
-        return $p;
+        $params = [];
+
+        foreach ( $this->where as $w ) {
+            $params[] = $w[2];
+        }
+
+        return $params;
     }
 
-    private function query($sql, $params = [])
+    // 执行 SQL 语句
+    private function query(string $sql, array $params = []): array
     {
-        $this->lastSql = $sql; // 记录日志
+        $this->lastSql = $sql;
         
         $api = 'https://api.cloudflare.com/client/v4/accounts/' . $this->config['D1']['accountId'] . '/d1/database/' . $this->dbId . '/raw';
         $header = [
@@ -259,13 +287,13 @@ class D1
 
         $res = HttpClient::post($api, json_encode(['sql' => $sql, 'params' => $params]), $header);
         
-        // 关键点：操作完成后立即重置
+        // 关键点：执行后立即清空链式条件
         $this->reset();
 
         if ( $res['statusCode'] != 200 ) {
             return ['success' => false, 'error' => 'HTTP_ERROR_' . $res['statusCode']];
         }
 
-        return json_decode($res['body'], true);
+        return json_decode($res['body'], true) ?? [];
     }
 }
