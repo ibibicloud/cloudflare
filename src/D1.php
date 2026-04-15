@@ -93,6 +93,23 @@ class D1
         return $this;
     }
 
+    // 统计总数
+    public function count(): int
+    {
+        $sql = "SELECT COUNT(*) AS count FROM {$this->table}";
+        $sql .= $this->buildWhereSql();
+        $params = $this->getWhereParams();
+        
+        $res = $this->query($sql, $params);
+
+        if ( $res['result'] && isset($res['result'][0]['results']) ) {
+            $data = $this->format($res['result'][0]['results']);
+            return (int)($data[0]['count'] ?? 0);
+        }
+
+        return 0;
+    }
+
     // 查询多条
     public function select(): array
     {

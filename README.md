@@ -43,11 +43,13 @@ use ibibicloud\cloudflare\facade\D1;
 
 // 查询
 D1::table('users')->where('id', 8)->find();
-D1::table('users')->where('id', '<', 10)->order('id DESC')->field('id, nickname')->limit(2)->select();
+D1::table('users')->where('id', '<', 10)->order('id DESC')->field('id, nickname')->limit(10)->select();		// 10=条数
+D1::table('users')->where('id', '<', 10)->order('id DESC')->field('id, nickname')->limit(10, 20)->select();	// 10=条数 20=偏移量
 D1::table('users')->where([
 	['nickname', '=', '张三'],
 	['aweme_count', '=', 125]
 ])->select());
+D1::table('users')->count();
 
 // 新增 支持 单条/多条
 D1::table('users')->insert();
