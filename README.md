@@ -37,6 +37,19 @@ CREATE TABLE IF NOT EXISTS users (
 	update_time DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ~~~
+~~~
+CREATE TABLE IF NOT EXISTS author (
+	id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+	nickname TEXT NOT NULL,
+	avatar TEXT,
+	signature TEXT,
+	aweme_count TEXT,
+	follower_count TEXT,
+	total_favorited TEXT,
+	sec_user_id TEXT NOT NULL,
+	update_time TEXT NOT NULL
+);
+~~~
 
 ~~~
 use ibibicloud\cloudflare\facade\D1;
